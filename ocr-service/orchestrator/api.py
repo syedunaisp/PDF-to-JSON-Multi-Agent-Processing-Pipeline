@@ -109,11 +109,20 @@ async def convert_pdf_to_markdown(file: UploadFile = File(...)):
     try:
         # Stage 1: OCR Extraction
         pdf_bytes = await file.read()
+        print(f"Processing PDF: {file.filename}, size: {len(pdf_bytes)} bytes")
+        
         ocr_results = extract_text_from_pdf_bytes(pdf_bytes)
+        print(f"OCR results: {len(ocr_results)} pages processed")
+        
+        # Debug: Print first result
+        if ocr_results:
+            print(f"First page result: {ocr_results[0]}")
         
         # Stage 2: Markdown Formatting
         document_title = file.filename.replace('.pdf', '').replace('_', ' ').title()
         markdown_content = format_to_markdown(ocr_results, title=document_title)
+        
+        print(f"Markdown content length: {len(markdown_content)} characters")
         
         # Save to temporary file
         with tempfile.NamedTemporaryFile(mode='w', suffix='.md', delete=False, encoding='utf-8') as tmp_md:
