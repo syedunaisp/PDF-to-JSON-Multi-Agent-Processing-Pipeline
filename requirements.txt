@@ -1,0 +1,15 @@
+# Core dependencies
+fastapi
+uvicorn
+python-multipart
+python-dotenv
+
+# OCR and PDF processing
+PyMuPDF
+Pillow
+requests
+
+# Future: LangChain integration (uncomment when needed)
+# langchain
+# langchain-community
+# langchain-openai
