@@ -56,18 +56,26 @@ Final JSON Output
 ```
 pdf-to-json-pipeline/
 │
-├── ocr-service/           # LightOn OCR integration
+├── ocr_service/           # ✅ LightOn OCR integration (Member 1)
 │   ├── __init__.py
 │   └── ocr_api.py         # OCR API calls
 │
-├── markdown-formatter/    # OCR → Markdown processing
+├── markdown_formatter/    # ✅ OCR → Markdown processing (Member 1)
 │   ├── __init__.py
 │   └── formatter.py       # Markdown structuring
 │
-├── llm-parser/           # LangChain + LLM parsing (Future)
-│   └── parser.py         # Markdown → JSON conversion
+├── orchestrator/          # ✅ Pipeline controller (Member 1)
+│   └── api.py            # FastAPI service
 │
-├── validator/            # Schema validation (Future)
+├── validation-service/    # 🔄 Schema validation (Member 3)
+│   └── src/              # JSON validation and repair
+│
+├── config/               # Configuration
+│   └── .env.example      # Environment template
+│
+├── requirements.txt      # Python dependencies
+└── README.md
+```
 │   └── validator.py      # JSON validation and repair
 │
 ├── orchestrator/         # Pipeline controller
@@ -93,11 +101,11 @@ pdf-to-json-pipeline/
 - Structures OCR output into clean Markdown format
 - Preserves page structure and sections
 
-### 🔄 3️⃣ LLM-Based Parsing (Future)
+### 🔄 3️⃣ LLM-Based Parsing (In Progress - Other Team Member)
 - Will use LangChain with local/cloud LLM
 - Converts Markdown into structured JSON
 
-### 🔄 4️⃣ Validation & Repair (Future)
+### 🔄 4️⃣ Validation & Repair (In Progress - validation-service/)
 - Validates output using JSON schemas
 - Automatically repairs invalid JSON
 
@@ -182,33 +190,29 @@ Visit `http://localhost:8000/docs` for Swagger UI
 
 ## 🔧 Development Status
 
-| Module | Status | Description |
-|--------|--------|-------------|
-| OCR Service | ✅ Complete | PDF → Text extraction |
-| Markdown Formatter | ✅ Complete | Text → Structured markdown |
-| LLM Parser | 🔄 Planned | Markdown → JSON |
-| Validator | 🔄 Planned | JSON validation |
-| Orchestrator | ✅ Complete | API service |
+| Module | Status | Owner | Description |
+|--------|--------|-------|-------------|
+| OCR Service | ✅ Complete | Member 1 | PDF → Text extraction |
+| Markdown Formatter | ✅ Complete | Member 1 | Text → Structured markdown |
+| Orchestrator | ✅ Complete | Member 1 | API service |
+| LLM Parser | 🔄 In Progress | Member 2 | Markdown → JSON |
+| Validation Service | 🔄 In Progress | Member 3 | JSON validation |
 
 ---
 
 ## 🎯 Next Steps
 
-1. **LangChain Integration**
+1. **LLM Integration (Member 2)**
    - Add LLM parser for Markdown → JSON conversion
    - Support for local models (Ollama) or cloud APIs
 
-2. **Schema Validation**
-   - Define JSON schema for JEE questions
-   - Implement validation and auto-repair
+2. **Complete Validation Service (Member 3)**
+   - Finalize JSON schema for JEE questions
+   - Complete validation and auto-repair logic
 
-3. **Pipeline Orchestration**
+3. **Pipeline Integration**
    - Connect all stages
    - Add error handling and retry logic
-
-4. **Docker Support**
-   - Create production Dockerfile
-   - Docker Compose for full stack
 
 ---
 

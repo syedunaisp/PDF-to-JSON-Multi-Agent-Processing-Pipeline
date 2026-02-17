@@ -1,7 +1,0 @@
-fastapi
-uvicorn
-requests
-python-multipart
-python-dotenv
-pdf2image
-Pillow
