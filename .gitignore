@@ -52,5 +52,6 @@ tmp/
 
 # Output files
 output/
-*.md
-*.json
+temp_output.md
+temp_*.md
+output_*.json
