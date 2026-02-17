@@ -11,12 +11,16 @@ from fastapi.responses import JSONResponse, FileResponse
 from dotenv import load_dotenv
 
 # Add parent directory to path for imports
-sys.path.append(str(Path(__file__).parent.parent))
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root))
 
+# Import with underscore naming
 from ocr_service.ocr_api import extract_text_from_pdf_bytes, ocr_image_bytes
 from markdown_formatter.formatter import format_to_markdown
 
-load_dotenv()
+# Load environment from config folder
+config_path = project_root / "config" / ".env"
+load_dotenv(config_path)
 
 app = FastAPI(
     title="PDF to Markdown OCR Service",
