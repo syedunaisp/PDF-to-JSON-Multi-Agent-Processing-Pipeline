@@ -3,5 +3,4 @@ uvicorn
 python-multipart
 PyMuPDF
 Pillow
-paddlepaddle
-paddleocr
+python-doctr[torch]

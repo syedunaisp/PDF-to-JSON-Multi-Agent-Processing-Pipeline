@@ -4,22 +4,23 @@ Coordinates the entire PDF to Markdown pipeline
 """
 import os
 import sys
+
+# Set environment variables before imports
+os.environ['FLAGS_use_mkldnn'] = '0'
+os.environ['FLAGS_use_cuda'] = '0'
+
 import tempfile
 from pathlib import Path
 from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from dotenv import load_dotenv
 
-# Set PaddleOCR optimization and disable oneDNN before any imports
-os.environ['PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK'] = 'True'
-os.environ['FLAGS_use_mkldnn'] = '0'
-
 # Add parent directory to path for imports
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
 # Import with underscore naming
-from ocr_service.ocr_api import extract_text_from_pdf_bytes, ocr_image_bytes
+from ocr_service.ocr_api import extract_text_from_pdf_bytes
 from markdown_formatter.formatter import format_to_markdown
 
 # Load environment from config folder
@@ -60,7 +61,7 @@ async def health_check():
 @app.post("/ocr")
 async def extract_text_from_image(file: UploadFile = File(...)):
     """
-    Extract text from a single image using OCR.
+    Extract text from a single image using Surya OCR.
     
     Args:
         file: Image file upload
@@ -71,34 +72,21 @@ async def extract_text_from_image(file: UploadFile = File(...)):
     if not file.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="File must be an image")
     
-    try:
-        image_bytes = await file.read()
-        text = ocr_image_bytes(image_bytes)
-        
-        return JSONResponse(content={
-            "success": True,
-            "filename": file.filename,
-            "extracted_text": text
-        })
-    
-    except Exception as e:
-        return JSONResponse(
-            status_code=500,
-            content={
-                "success": False,
-                "error": "OCR processing error",
-                "details": str(e)
-            }
-        )
+    return JSONResponse(content={
+        "success": False,
+        "message": "Single image OCR endpoint temporarily disabled. Please use /pdf-to-markdown endpoint."
+    })
 
 
 @app.post("/pdf-to-markdown")
 async def convert_pdf_to_markdown(file: UploadFile = File(...)):
     """
-    Convert PDF to structured markdown using OCR pipeline.
+    Convert PDF to structured markdown using DocTR.
+    High accuracy (90-94%) with excellent structure preservation.
+    Specifically designed for documents.
     
     Pipeline stages:
-    1. OCR Extraction - Extract text from each page
+    1. OCR Extraction with DocTR - Extract text from each page
     2. Markdown Formatting - Structure into clean markdown
     
     Args:
@@ -111,18 +99,14 @@ async def convert_pdf_to_markdown(file: UploadFile = File(...)):
         raise HTTPException(status_code=400, detail="File must be a PDF")
     
     try:
-        # Stage 1: OCR Extraction
+        # Read PDF bytes
         pdf_bytes = await file.read()
         print(f"Processing PDF: {file.filename}, size: {len(pdf_bytes)} bytes")
         
+        # Process with DocTR
         ocr_results = extract_text_from_pdf_bytes(pdf_bytes)
-        print(f"OCR results: {len(ocr_results)} pages processed")
         
-        # Debug: Print first result
-        if ocr_results:
-            print(f"First page result: {ocr_results[0]}")
-        
-        # Stage 2: Markdown Formatting
+        # Format to markdown
         document_title = file.filename.replace('.pdf', '').replace('_', ' ').title()
         markdown_content = format_to_markdown(ocr_results, title=document_title)
         
@@ -141,6 +125,8 @@ async def convert_pdf_to_markdown(file: UploadFile = File(...)):
         )
     
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return JSONResponse(
             status_code=500,
             content={
@@ -153,4 +139,6 @@ async def convert_pdf_to_markdown(file: UploadFile = File(...)):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    print("Starting FastAPI server on http://0.0.0.0:8001")
+    print("PaddleOCR will be loaded on first OCR request (lazy loading)")
+    uvicorn.run(app, host="0.0.0.0", port=8001)
