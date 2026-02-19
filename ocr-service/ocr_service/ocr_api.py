@@ -1,6 +1,7 @@
 """
-OCR Service - PyMuPDF Text Extraction with Tesseract OCR fallback
-Extracts text directly from PDFs, with Tesseract OCR as fallback for images
+OCR Service - PyMuPDF Text Extraction with PaddleOCR fallback
+Extracts text directly from PDFs, with PaddleOCR as fallback for images
+PaddleOCR supports 80+ languages and handles complex layouts better
 """
 import os
 import tempfile
@@ -9,24 +10,37 @@ from pathlib import Path
 import fitz  # PyMuPDF
 from PIL import Image
 import io
+import numpy as np
 
-# Try to import pytesseract, but make it optional
+# Try to import PaddleOCR
 try:
-    import pytesseract
-    # Set Tesseract path for Windows
-    pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
-    TESSERACT_AVAILABLE = True
+    from paddleocr import PaddleOCR
+    import paddle
+    
+    # Force CPU mode and disable oneDNN completely
+    paddle.set_device('cpu')
+    
+    # Disable all oneDNN optimizations via Paddle's config
+    try:
+        from paddle.fluid import core
+        core.set_flags({'FLAGS_use_mkldnn': False})
+    except:
+        pass
+    
+    # Initialize PaddleOCR with minimal parameters
+    # use_angle_cls=True helps with rotated text
+    # lang='en' for English
+    ocr_engine = PaddleOCR(use_angle_cls=True, lang='en')
+    PADDLE_AVAILABLE = True
 except ImportError:
-    TESSERACT_AVAILABLE = False
-
-# Tesseract configuration for better performance and multi-language support
-TESSERACT_CONFIG = '--oem 3 --psm 6'  # LSTM OCR Engine, Assume uniform block of text
+    PADDLE_AVAILABLE = False
+    ocr_engine = None
 
 
 def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> List[Dict[str, any]]:
     """
     Extract text from PDF bytes. First tries direct text extraction,
-    falls back to OCR if needed.
+    falls back to PaddleOCR if needed.
     
     Args:
         pdf_bytes: PDF file as bytes
@@ -45,19 +59,29 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> List[Dict[str, any]]:
         # First, try to extract text directly (works for text-based PDFs)
         text = page.get_text()
         
-        # If no text found and Tesseract is available, try OCR
-        if not text.strip() and TESSERACT_AVAILABLE:
+        # If no text found and PaddleOCR is available, try OCR
+        if not text.strip() and PADDLE_AVAILABLE:
             try:
-                # Convert page to image (150 DPI for faster processing)
-                mat = fitz.Matrix(150/72, 150/72)
+                # Convert page to image (higher DPI for better OCR)
+                mat = fitz.Matrix(2, 2)  # 2x zoom = ~144 DPI
                 pix = page.get_pixmap(matrix=mat)
                 
-                # Convert to PIL Image
-                img_bytes = pix.tobytes("png")
-                image = Image.open(io.BytesIO(img_bytes))
+                # Convert to numpy array for PaddleOCR
+                img_data = pix.tobytes("png")
+                image = Image.open(io.BytesIO(img_data))
+                img_array = np.array(image)
                 
-                # Run OCR with optimized config
-                text = pytesseract.image_to_string(image, config=TESSERACT_CONFIG)
+                # Run PaddleOCR (no cls parameter, it's set during initialization)
+                result = ocr_engine.ocr(img_array)
+                
+                # Extract text from PaddleOCR result
+                if result and result[0]:
+                    text_lines = []
+                    for line in result[0]:
+                        if line[1][0]:  # line[1][0] contains the text
+                            text_lines.append(line[1][0])
+                    text = '\n'.join(text_lines)
+                
             except Exception as e:
                 text = f"[OCR Error: {str(e)}]"
         
@@ -89,7 +113,7 @@ def extract_text_from_pdf(pdf_path: str) -> List[Dict[str, any]]:
 
 def ocr_image_bytes(image_bytes: bytes) -> str:
     """
-    Extract text from image bytes.
+    Extract text from image bytes using PaddleOCR.
     
     Args:
         image_bytes: Raw image bytes
@@ -97,16 +121,26 @@ def ocr_image_bytes(image_bytes: bytes) -> str:
     Returns:
         Extracted text from the image
     """
-    if not TESSERACT_AVAILABLE:
-        return "[Tesseract not installed - text extraction only works for text-based PDFs]"
+    if not PADDLE_AVAILABLE:
+        return "[PaddleOCR not installed - text extraction only works for text-based PDFs]"
     
     try:
-        # Convert bytes to PIL Image
+        # Convert bytes to PIL Image then to numpy array
         image = Image.open(io.BytesIO(image_bytes))
+        img_array = np.array(image)
         
-        # Run OCR with Tesseract (optimized config)
-        text = pytesseract.image_to_string(image, config=TESSERACT_CONFIG)
+        # Run PaddleOCR (no cls parameter)
+        result = ocr_engine.ocr(img_array)
         
-        return text.strip()
+        # Extract text from result
+        if result and result[0]:
+            text_lines = []
+            for line in result[0]:
+                if line[1][0]:
+                    text_lines.append(line[1][0])
+            return '\n'.join(text_lines)
+        
+        return ""
+        
     except Exception as e:
         raise Exception(f"OCR error: {str(e)}")

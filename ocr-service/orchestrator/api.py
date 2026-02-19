@@ -10,6 +10,10 @@ from fastapi import FastAPI, File, UploadFile, HTTPException
 from fastapi.responses import JSONResponse, FileResponse
 from dotenv import load_dotenv
 
+# Set PaddleOCR optimization and disable oneDNN before any imports
+os.environ['PADDLE_PDX_DISABLE_MODEL_SOURCE_CHECK'] = 'True'
+os.environ['FLAGS_use_mkldnn'] = '0'
+
 # Add parent directory to path for imports
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
