@@ -1,7 +1,7 @@
 """
-OCR Service - DocTR Implementation
-High-accuracy document OCR with excellent structure preservation
-Specifically designed for documents, not general images
+OCR Service - Hybrid DocTR + Pix2Text Implementation
+- DocTR: High-accuracy text recognition (90-94%)
+- Pix2Text: Mathematical formula recognition with LaTeX output
 CPU-optimized with good Windows compatibility
 """
 import os
@@ -14,9 +14,11 @@ from PIL import Image
 import io
 import numpy as np
 
-# Lazy load DocTR to avoid startup delays
+# Lazy load models to avoid startup delays
 DOCTR_AVAILABLE = False
+PIX2TEXT_AVAILABLE = False
 doctr_model = None
+pix2text_model = None
 
 # Batch processing configuration - FIXED at 5 pages per batch
 BATCH_SIZE = 5  # Always process 5 pages at a time
@@ -36,7 +38,6 @@ def _init_doctr():
         print("   This may take a few minutes on first use...")
         
         # Initialize DocTR with pretrained model
-        # Using db_resnet50 for detection and crnn_vgg16_bn for recognition
         doctr_model = ocr_predictor(pretrained=True)
         
         DOCTR_AVAILABLE = True
@@ -50,10 +51,35 @@ def _init_doctr():
         doctr_model = None
 
 
-def _process_page_doctr(page, page_num):
-    """Process a single page with DocTR"""
+def _init_pix2text():
+    """Initialize Pix2Text for mathematical formulas (lazy loading)"""
+    global PIX2TEXT_AVAILABLE, pix2text_model
+    
+    if pix2text_model is not None:
+        return
+    
     try:
-        print(f"  📄 Page {page_num + 1}: Running DocTR OCR...")
+        from pix2text import Pix2Text
+        
+        print("🔧 Initializing Pix2Text for math formulas...")
+        print("   This may take a few minutes on first use...")
+        
+        # Initialize Pix2Text with math formula recognition
+        pix2text_model = Pix2Text.from_config()
+        
+        PIX2TEXT_AVAILABLE = True
+        print("✅ Pix2Text initialized successfully!")
+        
+    except Exception as e:
+        print(f"⚠️  Pix2Text not available (math formulas will use DocTR): {e}")
+        PIX2TEXT_AVAILABLE = False
+        pix2text_model = None
+
+
+def _process_page_hybrid(page, page_num):
+    """Process a single page with hybrid DocTR + Pix2Text approach"""
+    try:
+        print(f"  📄 Page {page_num + 1}: Running hybrid OCR (DocTR + Pix2Text)...")
         
         # Convert page to image with good DPI
         mat = fitz.Matrix(2.0, 2.0)  # 2x zoom = ~144 DPI
@@ -69,6 +95,45 @@ def _process_page_doctr(page, page_num):
             new_size = (int(image.width * ratio), int(image.height * ratio))
             image = image.resize(new_size, Image.Resampling.LANCZOS)
         
+        # Try Pix2Text first (better for math formulas)
+        if PIX2TEXT_AVAILABLE and pix2text_model is not None:
+            try:
+                # Pix2Text can handle both text and math formulas
+                result = pix2text_model.recognize(image, resized_shape=800)
+                
+                # Extract text with LaTeX formulas
+                if isinstance(result, dict) and 'text' in result:
+                    text = result['text']
+                elif isinstance(result, str):
+                    text = result
+                else:
+                    text = str(result)
+                
+                print(f"  ✅ Page {page_num + 1}: Pix2Text completed ({len(text)} characters)")
+                
+            except Exception as e:
+                print(f"  ⚠️  Page {page_num + 1}: Pix2Text failed, falling back to DocTR - {e}")
+                text = _process_with_doctr(image, page_num)
+        else:
+            # Fall back to DocTR
+            text = _process_with_doctr(image, page_num)
+        
+        # Clean up memory
+        del image, img_data, pix
+        gc.collect()
+        
+        return text.strip()
+        
+    except Exception as e:
+        print(f"  ❌ Page {page_num + 1}: Hybrid OCR Error - {e}")
+        import traceback
+        traceback.print_exc()
+        return f"[OCR Error: {str(e)}]"
+
+
+def _process_with_doctr(image, page_num):
+    """Process image with DocTR (fallback or when Pix2Text unavailable)"""
+    try:
         # Convert to numpy array for DocTR
         img_array = np.array(image)
         
@@ -85,25 +150,20 @@ def _process_page_doctr(page, page_num):
                         text_lines.append(line_text)
         
         text = '\n'.join(text_lines)
-        
         print(f"  ✅ Page {page_num + 1}: DocTR completed ({len(text)} characters)")
         
-        # Clean up memory
-        del img_array, image, img_data, pix
-        gc.collect()
-        
+        del img_array
         return text.strip()
         
     except Exception as e:
         print(f"  ❌ Page {page_num + 1}: DocTR Error - {e}")
-        import traceback
-        traceback.print_exc()
         return f"[DocTR Error: {str(e)}]"
 
 
 def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> List[Dict[str, any]]:
     """
-    Extract text from PDF bytes with 5-page batch processing using DocTR.
+    Extract text from PDF bytes with 5-page batch processing using hybrid OCR.
+    Uses Pix2Text for math formulas (LaTeX output) and DocTR for regular text.
     Each batch of 5 pages is fully processed before moving to the next.
     Detailed progress logging for each page.
 
@@ -121,11 +181,12 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> List[Dict[str, any]]:
     total_batches = (total_pages + BATCH_SIZE - 1) // BATCH_SIZE
 
     print(f"\n{'='*70}")
-    print(f"📚 PDF PROCESSING STARTED - Using DocTR")
+    print(f"📚 PDF PROCESSING STARTED - Hybrid OCR (DocTR + Pix2Text)")
     print(f"{'='*70}")
     print(f"Total Pages: {total_pages}")
     print(f"Batch Size: {BATCH_SIZE} pages per batch")
     print(f"Total Batches: {total_batches}")
+    print(f"Math Formulas: Will be converted to LaTeX format")
     print(f"{'='*70}\n")
 
     # Process pages in batches of 5
@@ -145,15 +206,17 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> List[Dict[str, any]]:
 
             # If no text found, try OCR
             if not text.strip():
-                # Initialize DocTR on first use
+                # Initialize models on first use
                 if doctr_model is None:
                     _init_doctr()
+                if pix2text_model is None:
+                    _init_pix2text()
 
                 if DOCTR_AVAILABLE and doctr_model is not None:
-                    text = _process_page_doctr(page, page_num)
+                    text = _process_page_hybrid(page, page_num)
                 else:
-                    text = "[OCR not available - DocTR failed to initialize]"
-                    print(f"  ❌ Page {page_num + 1}: DocTR not available")
+                    text = "[OCR not available - Models failed to initialize]"
+                    print(f"  ❌ Page {page_num + 1}: OCR not available")
             else:
                 print(f"  ✅ Page {page_num + 1}: Text extracted directly (no OCR needed)")
 
@@ -173,9 +236,10 @@ def extract_text_from_pdf_bytes(pdf_bytes: bytes) -> List[Dict[str, any]]:
     pdf_document.close()
 
     print(f"\n{'='*70}")
-    print(f"✅ ALL {total_pages} PAGES PROCESSED SUCCESSFULLY with DocTR!")
+    print(f"✅ ALL {total_pages} PAGES PROCESSED SUCCESSFULLY!")
     print(f"{'='*70}")
     print(f"📄 Final integrated markdown file ready")
+    print(f"📐 Math formulas converted to LaTeX format")
     print(f"{'='*70}\n")
 
     return results

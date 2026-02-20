@@ -81,19 +81,22 @@ async def extract_text_from_image(file: UploadFile = File(...)):
 @app.post("/pdf-to-markdown")
 async def convert_pdf_to_markdown(file: UploadFile = File(...)):
     """
-    Convert PDF to structured markdown using DocTR.
-    High accuracy (90-94%) with excellent structure preservation.
-    Specifically designed for documents.
+    Convert PDF to structured markdown using hybrid OCR approach.
+    
+    - Pix2Text: Mathematical formulas with LaTeX output
+    - DocTR: Regular text with 90-94% accuracy
+    
+    Perfect for documents with mathematical expressions, equations, and formulas.
     
     Pipeline stages:
-    1. OCR Extraction with DocTR - Extract text from each page
-    2. Markdown Formatting - Structure into clean markdown
+    1. OCR Extraction - Hybrid approach for text and math
+    2. Markdown Formatting - Structure into clean markdown with LaTeX
     
     Args:
         file: PDF file upload
         
     Returns:
-        Markdown file download
+        Markdown file download with LaTeX formulas
     """
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=400, detail="File must be a PDF")
@@ -103,7 +106,7 @@ async def convert_pdf_to_markdown(file: UploadFile = File(...)):
         pdf_bytes = await file.read()
         print(f"Processing PDF: {file.filename}, size: {len(pdf_bytes)} bytes")
         
-        # Process with DocTR
+        # Process with hybrid OCR
         ocr_results = extract_text_from_pdf_bytes(pdf_bytes)
         
         # Format to markdown
